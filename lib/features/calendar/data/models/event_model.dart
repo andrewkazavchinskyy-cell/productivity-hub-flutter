@@ -1,36 +1,12 @@
-import 'package:json_annotation/json_annotation.dart';
+import '../../domain/entities/event.dart';
 
-part 'event_model.g.dart';
-
-@JsonSerializable()
 class EventModel {
-  final String id;
-  final String title;
-  final String? description;
-  @JsonKey(name: 'start_time')
-  final DateTime startTime;
-  @JsonKey(name: 'end_time')
-  final DateTime endTime;
-  final String? location;
-  @JsonKey(name: 'is_all_day')
-  final bool isAllDay;
-  final List<String> attendees;
-  final String? recurrence;
-  @JsonKey(name: 'reminder_minutes')
-  final int reminderMinutes;
-  @JsonKey(name: 'calendar_id')
-  final String? calendarId;
-  @JsonKey(name: 'created_at')
-  final DateTime createdAt;
-  @JsonKey(name: 'updated_at')
-  final DateTime updatedAt;
-
   const EventModel({
     required this.id,
     required this.title,
-    this.description,
     required this.startTime,
     required this.endTime,
+    this.description,
     this.location,
     this.isAllDay = false,
     this.attendees = const [],
@@ -41,10 +17,78 @@ class EventModel {
     required this.updatedAt,
   });
 
-  factory EventModel.fromJson(Map<String, dynamic> json) =>
-      _$EventModelFromJson(json);
+  final String id;
+  final String title;
+  final String? description;
+  final DateTime startTime;
+  final DateTime endTime;
+  final String? location;
+  final bool isAllDay;
+  final List<String> attendees;
+  final String? recurrence;
+  final int reminderMinutes;
+  final String? calendarId;
+  final DateTime createdAt;
+  final DateTime updatedAt;
 
-  Map<String, dynamic> toJson() => _$EventModelToJson(this);
+  factory EventModel.fromJson(Map<String, dynamic> json) {
+    final start = json['start_time'] ?? json['start'] ?? {};
+    final end = json['end_time'] ?? json['end'] ?? {};
+
+    DateTime parseDateTime(dynamic value) {
+      if (value is String) {
+        return DateTime.parse(value).toLocal();
+      }
+      if (value is Map<String, dynamic>) {
+        final dateTime = value['dateTime'] ?? value['date'];
+        if (dateTime is String) {
+          return DateTime.parse(dateTime).toLocal();
+        }
+      }
+      throw ArgumentError('Invalid date value: $value');
+    }
+
+    return EventModel(
+      id: json['id']?.toString() ?? '',
+      title: json['summary']?.toString() ?? json['title']?.toString() ?? 'Событие',
+      description: json['description'] as String?,
+      startTime: parseDateTime(start),
+      endTime: parseDateTime(end),
+      location: json['location'] as String?,
+      isAllDay: json['is_all_day'] as bool? ?? false,
+      attendees: (json['attendees'] as List<dynamic>? ?? [])
+          .map((item) => item is Map<String, dynamic> ? item['email']?.toString() ?? '' : item.toString())
+          .where((email) => email.isNotEmpty)
+          .toList(),
+      recurrence: (json['recurrence'] as List<dynamic>?)?.cast<String>().join('; '),
+      reminderMinutes: json['reminder_minutes'] as int? ?? 15,
+      calendarId: json['calendar_id'] as String?,
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'] as String).toLocal()
+          : DateTime.now(),
+      updatedAt: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'] as String).toLocal()
+          : DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'start_time': startTime.toIso8601String(),
+      'end_time': endTime.toIso8601String(),
+      'location': location,
+      'is_all_day': isAllDay,
+      'attendees': attendees,
+      'recurrence': recurrence,
+      'reminder_minutes': reminderMinutes,
+      'calendar_id': calendarId,
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
+    };
+  }
 
   factory EventModel.fromEntity(Event event) {
     return EventModel(
@@ -58,6 +102,7 @@ class EventModel {
       attendees: event.attendees,
       recurrence: event.recurrence,
       reminderMinutes: event.reminderMinutes,
+      calendarId: null,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
@@ -75,6 +120,38 @@ class EventModel {
       attendees: attendees,
       recurrence: recurrence,
       reminderMinutes: reminderMinutes,
+    );
+  }
+
+  EventModel copyWith({
+    String? id,
+    String? title,
+    String? description,
+    DateTime? startTime,
+    DateTime? endTime,
+    String? location,
+    bool? isAllDay,
+    List<String>? attendees,
+    String? recurrence,
+    int? reminderMinutes,
+    String? calendarId,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return EventModel(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
+      location: location ?? this.location,
+      isAllDay: isAllDay ?? this.isAllDay,
+      attendees: attendees ?? this.attendees,
+      recurrence: recurrence ?? this.recurrence,
+      reminderMinutes: reminderMinutes ?? this.reminderMinutes,
+      calendarId: calendarId ?? this.calendarId,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 }

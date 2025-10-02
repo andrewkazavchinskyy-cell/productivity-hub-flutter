@@ -14,64 +14,44 @@ class CalendarInitial extends CalendarState {}
 class CalendarLoading extends CalendarState {}
 
 class CalendarLoaded extends CalendarState {
-  final List<Event> events;
-  final DateTime selectedDate;
-  final List<Event> filteredEvents;
-
   const CalendarLoaded({
     required this.events,
     required this.selectedDate,
     this.filteredEvents = const [],
+    this.statusMessage,
   });
+
+  final List<Event> events;
+  final DateTime selectedDate;
+  final List<Event> filteredEvents;
+  final String? statusMessage;
 
   CalendarLoaded copyWith({
     List<Event>? events,
     DateTime? selectedDate,
     List<Event>? filteredEvents,
+    String? statusMessage,
+    bool clearStatusMessage = false,
   }) {
     return CalendarLoaded(
       events: events ?? this.events,
       selectedDate: selectedDate ?? this.selectedDate,
       filteredEvents: filteredEvents ?? this.filteredEvents,
+      statusMessage: clearStatusMessage
+          ? null
+          : statusMessage ?? this.statusMessage,
     );
   }
 
   @override
-  List<Object?> get props => [events, selectedDate, filteredEvents];
+  List<Object?> get props => [events, selectedDate, filteredEvents, statusMessage];
 }
 
 class CalendarError extends CalendarState {
-  final String message;
-
   const CalendarError(this.message);
+
+  final String message;
 
   @override
   List<Object?> get props => [message];
-}
-
-class EventCreated extends CalendarState {
-  final Event event;
-
-  const EventCreated(this.event);
-
-  @override
-  List<Object?> get props => [event];
-}
-
-class EventUpdated extends CalendarState {
-  final Event event;
-
-  const EventUpdated(this.event);
-
-  @override
-  List<Object?> get props => [event];
-}
-
-class EventDeleted extends CalendarState {
-  final String eventId;
-
-  const EventDeleted(this.eventId);
-
-  @override
-  List<Object?> get props => [eventId];
 }
