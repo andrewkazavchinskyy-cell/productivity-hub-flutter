@@ -1,18 +1,15 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/utils/logger.dart';
+import '../../domain/entities/event.dart';
 import '../../domain/repositories/calendar_repository.dart';
 import 'calendar_event.dart';
 import 'calendar_state.dart';
 
 class CalendarBloc extends Bloc<CalendarEvent, CalendarState> {
-  final CalendarRepository _calendarRepository;
-
-  CalendarBloc({
-    required CalendarRepository calendarRepository,
-  }) : _calendarRepository = calendarRepository,
-       super(CalendarInitial()) {
-    
+  CalendarBloc({required CalendarRepository calendarRepository})
+      : _calendarRepository = calendarRepository,
+        super(CalendarInitial()) {
     on<LoadCalendarEvents>(_onLoadCalendarEvents);
     on<CreateEvent>(_onCreateEvent);
     on<UpdateEvent>(_onUpdateEvent);
@@ -22,37 +19,43 @@ class CalendarBloc extends Bloc<CalendarEvent, CalendarState> {
     on<SelectDate>(_onSelectDate);
   }
 
+  final CalendarRepository _calendarRepository;
+  DateTime? _lastStartDate;
+  DateTime? _lastEndDate;
+
   Future<void> _onLoadCalendarEvents(
     LoadCalendarEvents event,
     Emitter<CalendarState> emit,
   ) async {
     emit(CalendarLoading());
-    
+    _lastStartDate = event.startDate;
+    _lastEndDate = event.endDate;
+
     try {
-      AppLogger.info('Loading calendar events from ${event.startDate} to ${event.endDate}');
-      
+      AppLogger.info('Bloc: loading events from ${event.startDate} to ${event.endDate}');
+
       final result = await _calendarRepository.getEvents(
         startDate: event.startDate,
         endDate: event.endDate,
       );
-      
+
       result.fold(
         (failure) {
-          AppLogger.error('Failed to load events: ${failure.message}');
+          AppLogger.error('Bloc: failed to load events: ${failure.message}');
           emit(CalendarError(failure.message));
         },
         (events) {
-          AppLogger.info('Successfully loaded ${events.length} events');
+          final filteredEvents = _filterEventsForDate(events, event.startDate);
           emit(CalendarLoaded(
             events: events,
             selectedDate: event.startDate,
-            filteredEvents: events,
+            filteredEvents: filteredEvents,
           ));
         },
       );
-    } catch (e) {
-      AppLogger.error('Unexpected error loading events: $e');
-      emit(CalendarError('Неожиданная ошибка при загрузке событий'));
+    } catch (error, stackTrace) {
+      AppLogger.error('Bloc: unexpected error loading events: $error', error, stackTrace);
+      emit(const CalendarError('Неожиданная ошибка при загрузке событий'));
     }
   }
 
@@ -61,26 +64,21 @@ class CalendarBloc extends Bloc<CalendarEvent, CalendarState> {
     Emitter<CalendarState> emit,
   ) async {
     try {
-      AppLogger.info('Creating event: ${event.event.title}');
-      
+      AppLogger.info('Bloc: creating event ${event.event.title}');
+
       final result = await _calendarRepository.createEvent(event.event);
-      
       result.fold(
         (failure) {
-          AppLogger.error('Failed to create event: ${failure.message}');
+          AppLogger.error('Bloc: failed to create event: ${failure.message}');
           emit(CalendarError(failure.message));
         },
-        (createdEvent) {
-          AppLogger.info('Successfully created event: ${createdEvent.id}');
-          emit(EventCreated(createdEvent));
-          
-          // Refresh the calendar
-          add(RefreshCalendar());
+        (_) async {
+          await _reloadCalendar(emit, message: 'Событие создано');
         },
       );
-    } catch (e) {
-      AppLogger.error('Unexpected error creating event: $e');
-      emit(CalendarError('Неожиданная ошибка при создании события'));
+    } catch (error, stackTrace) {
+      AppLogger.error('Bloc: unexpected error creating event: $error', error, stackTrace);
+      emit(const CalendarError('Неожиданная ошибка при создании события'));
     }
   }
 
@@ -89,26 +87,21 @@ class CalendarBloc extends Bloc<CalendarEvent, CalendarState> {
     Emitter<CalendarState> emit,
   ) async {
     try {
-      AppLogger.info('Updating event: ${event.event.id}');
-      
+      AppLogger.info('Bloc: updating event ${event.event.id}');
+
       final result = await _calendarRepository.updateEvent(event.event);
-      
       result.fold(
         (failure) {
-          AppLogger.error('Failed to update event: ${failure.message}');
+          AppLogger.error('Bloc: failed to update event: ${failure.message}');
           emit(CalendarError(failure.message));
         },
-        (updatedEvent) {
-          AppLogger.info('Successfully updated event: ${updatedEvent.id}');
-          emit(EventUpdated(updatedEvent));
-          
-          // Refresh the calendar
-          add(RefreshCalendar());
+        (_) async {
+          await _reloadCalendar(emit, message: 'Событие обновлено');
         },
       );
-    } catch (e) {
-      AppLogger.error('Unexpected error updating event: $e');
-      emit(CalendarError('Неожиданная ошибка при обновлении события'));
+    } catch (error, stackTrace) {
+      AppLogger.error('Bloc: unexpected error updating event: $error', error, stackTrace);
+      emit(const CalendarError('Неожиданная ошибка при обновлении события'));
     }
   }
 
@@ -117,26 +110,21 @@ class CalendarBloc extends Bloc<CalendarEvent, CalendarState> {
     Emitter<CalendarState> emit,
   ) async {
     try {
-      AppLogger.info('Deleting event: ${event.eventId}');
-      
+      AppLogger.info('Bloc: deleting event ${event.eventId}');
+
       final result = await _calendarRepository.deleteEvent(event.eventId);
-      
       result.fold(
         (failure) {
-          AppLogger.error('Failed to delete event: ${failure.message}');
+          AppLogger.error('Bloc: failed to delete event: ${failure.message}');
           emit(CalendarError(failure.message));
         },
-        (_) {
-          AppLogger.info('Successfully deleted event: ${event.eventId}');
-          emit(EventDeleted(event.eventId));
-          
-          // Refresh the calendar
-          add(RefreshCalendar());
+        (_) async {
+          await _reloadCalendar(emit, message: 'Событие удалено');
         },
       );
-    } catch (e) {
-      AppLogger.error('Unexpected error deleting event: $e');
-      emit(CalendarError('Неожиданная ошибка при удалении события'));
+    } catch (error, stackTrace) {
+      AppLogger.error('Bloc: unexpected error deleting event: $error', error, stackTrace);
+      emit(const CalendarError('Неожиданная ошибка при удалении события'));
     }
   }
 
@@ -145,33 +133,40 @@ class CalendarBloc extends Bloc<CalendarEvent, CalendarState> {
     Emitter<CalendarState> emit,
   ) async {
     try {
-      AppLogger.info('Searching events with query: ${event.query}');
-      
+      AppLogger.info('Bloc: searching events with query ${event.query}');
+      final currentState = state;
+
+      if (currentState is CalendarLoaded && event.query.isEmpty) {
+        emit(currentState.copyWith(filteredEvents: currentState.events, clearStatusMessage: true));
+        return;
+      }
+
       final result = await _calendarRepository.searchEvents(event.query);
-      
       result.fold(
         (failure) {
-          AppLogger.error('Failed to search events: ${failure.message}');
+          AppLogger.error('Bloc: failed to search events: ${failure.message}');
           emit(CalendarError(failure.message));
         },
         (events) {
-          AppLogger.info('Found ${events.length} events matching query');
-          
-          final currentState = state;
-          if (currentState is CalendarLoaded) {
-            emit(currentState.copyWith(filteredEvents: events));
+          if (state is CalendarLoaded) {
+            final loadedState = state as CalendarLoaded;
+            emit(loadedState.copyWith(
+              filteredEvents: events,
+              statusMessage: 'Найдено ${events.length} событий',
+            ));
           } else {
             emit(CalendarLoaded(
               events: events,
               selectedDate: DateTime.now(),
               filteredEvents: events,
+              statusMessage: 'Найдено ${events.length} событий',
             ));
           }
         },
       );
-    } catch (e) {
-      AppLogger.error('Unexpected error searching events: $e');
-      emit(CalendarError('Неожиданная ошибка при поиске событий'));
+    } catch (error, stackTrace) {
+      AppLogger.error('Bloc: unexpected error searching events: $error', error, stackTrace);
+      emit(const CalendarError('Неожиданная ошибка при поиске событий'));
     }
   }
 
@@ -179,13 +174,7 @@ class CalendarBloc extends Bloc<CalendarEvent, CalendarState> {
     RefreshCalendar event,
     Emitter<CalendarState> emit,
   ) async {
-    final currentState = state;
-    if (currentState is CalendarLoaded) {
-      add(LoadCalendarEvents(
-        startDate: currentState.selectedDate,
-        endDate: currentState.selectedDate.add(const Duration(days: 30)),
-      ));
-    }
+    await _reloadCalendar(emit, showLoading: true);
   }
 
   void _onSelectDate(
@@ -194,25 +183,59 @@ class CalendarBloc extends Bloc<CalendarEvent, CalendarState> {
   ) {
     final currentState = state;
     if (currentState is CalendarLoaded) {
-      // Filter events for the selected date
-      final dayEvents = currentState.events.where((event) {
-        final eventDate = DateTime(
-          event.startTime.year,
-          event.startTime.month,
-          event.startTime.day,
-        );
-        final selectedDate = DateTime(
-          event.selectedDate.year,
-          event.selectedDate.month,
-          event.selectedDate.day,
-        );
-        return eventDate.isAtSameMomentAs(selectedDate);
-      }).toList();
-
+      final dayEvents = _filterEventsForDate(currentState.events, event.selectedDate);
       emit(currentState.copyWith(
         selectedDate: event.selectedDate,
         filteredEvents: dayEvents,
+        clearStatusMessage: true,
       ));
     }
+  }
+
+  Future<void> _reloadCalendar(
+    Emitter<CalendarState> emit, {
+    String? message,
+    bool showLoading = false,
+  }) async {
+    if (_lastStartDate == null || _lastEndDate == null) {
+      return;
+    }
+
+    final currentState = state;
+    if (showLoading) {
+      emit(CalendarLoading());
+    }
+
+    final result = await _calendarRepository.getEvents(
+      startDate: _lastStartDate!,
+      endDate: _lastEndDate!,
+    );
+
+    result.fold(
+      (failure) {
+        AppLogger.error('Bloc: failed to reload events: ${failure.message}');
+        emit(CalendarError(failure.message));
+      },
+      (events) {
+        final selectedDate = currentState is CalendarLoaded
+            ? currentState.selectedDate
+            : _lastStartDate!;
+        final filteredEvents = _filterEventsForDate(events, selectedDate);
+        emit(CalendarLoaded(
+          events: events,
+          selectedDate: selectedDate,
+          filteredEvents: filteredEvents,
+          statusMessage: message,
+        ));
+      },
+    );
+  }
+
+  List<Event> _filterEventsForDate(List<Event> events, DateTime selectedDate) {
+    return events.where((event) {
+      final eventDate = DateTime(event.startTime.year, event.startTime.month, event.startTime.day);
+      final targetDate = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
+      return eventDate == targetDate;
+    }).toList();
   }
 }
